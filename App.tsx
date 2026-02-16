@@ -12,7 +12,12 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
-  const [liveVotes, setLiveVotes] = useState<Record<string, { votes: number; candidateName: string }>>({});
+  const [liveVotes, setLiveVotes] = useState<Record<string, { 
+    votes: number; 
+    candidateName: string;
+    color?: string;
+    image?: string;
+  }>>({});
   const [discoveredAccounts, setDiscoveredAccounts] = useState<UserAccount[]>([]);
   
   const [settings, setSettings] = useState<AdminSettings>(() => {
@@ -70,20 +75,22 @@ const App: React.FC = () => {
       } catch (e) { console.error("Auth Sync Error", e); }
     }
 
-    // Sync คะแนนและชื่อแคนดิเดต (Column C)
+    // Sync คะแนน และข้อมูลเพิ่มเติม (Column A=พรรค, B=คะแนน, C=ชื่อแคนดิเดต, D=สี, E=รูป)
     if (settings.voteSheetUrl) {
       try {
         const response = await fetch(toCsvUrl(settings.voteSheetUrl));
         const csvText = await response.text();
         const rows = csvText.split(/\r?\n/).filter(r => r.trim());
-        const vMap: Record<string, { votes: number; candidateName: string }> = {};
+        const vMap: Record<string, { votes: number; candidateName: string; color?: string; image?: string }> = {};
         rows.forEach((row, i) => {
           if (i === 0) return;
           const cols = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.trim().replace(/^"|"$/g, ''));
           if (cols[0]) {
             vMap[cols[0]] = { 
               votes: parseInt(cols[1], 10) || 0, 
-              candidateName: cols[2] || 'ยังไม่ระบุชื่อ'
+              candidateName: cols[2] || 'ยังไม่ระบุชื่อ',
+              color: cols[3], // Column D: Color Code (#XXXXXX)
+              image: cols[4]  // Column E: Image URL
             };
           }
         });
@@ -111,7 +118,7 @@ const App: React.FC = () => {
     const candidates: Candidate[] = [];
     const processedParties = new Set<string>();
 
-    // 1. นำรายชื่อพรรคจาก settings มาตั้งต้น (เพื่อเอารูปและสีที่เราตั้งเอง)
+    // 1. นำรายชื่อพรรคจาก settings มาตั้งต้น
     settings.parties.forEach(p => {
       const live = liveVotes[p.name];
       candidates.push({
@@ -119,8 +126,10 @@ const App: React.FC = () => {
         name: live?.candidateName || p.candidateName || 'ไม่ระบุชื่อ',
         party: p.name,
         votes: live?.votes || 0,
-        color: p.color || '#3b82f6',
-        image: p.image || '',
+        // ลำดับความสำคัญ: ข้อมูลจาก Sheet (D) > ข้อมูลที่ตั้งเองใน Admin > ค่าเริ่มต้น
+        color: (live?.color && live.color.startsWith('#')) ? live.color : (p.color || '#3b82f6'),
+        // ลำดับความสำคัญ: ข้อมูลจาก Sheet (E) > ข้อมูลที่ตั้งเองใน Admin > ค่าเริ่มต้น
+        image: (live?.image && live.image.startsWith('http')) ? live.image : (p.image || ''),
         description: `พรรค${p.name}`,
         keyPolicies: []
       });
@@ -130,13 +139,14 @@ const App: React.FC = () => {
     // 2. ถ้าใน Sheet มีพรรคที่ยังไม่เคยตั้งค่าใน settings ให้สร้างเป็น Auto-Candidate
     Object.keys(liveVotes).forEach(name => {
       if (!processedParties.has(name) && isNaN(parseInt(name))) {
+        const live = liveVotes[name];
         candidates.push({
           id: `auto-${name}`,
-          name: liveVotes[name].candidateName,
+          name: live.candidateName,
           party: name,
-          votes: liveVotes[name].votes,
-          color: '#cbd5e1',
-          image: '',
+          votes: live.votes,
+          color: (live.color && live.color.startsWith('#')) ? live.color : '#cbd5e1',
+          image: (live.image && live.image.startsWith('http')) ? live.image : '',
           description: `ตรวจพบจาก Vote Sheet`,
           keyPolicies: []
         });
