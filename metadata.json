@@ -1,0 +1,8 @@
+
+{
+  "name": "ECT Vision Dashboard",
+  "description": "ระบบรายงานผลการเลือกตั้งจำลองแบบเรียลไทม์ พร้อมการจัดการข้อมูลผ่าน Google Sheets",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
